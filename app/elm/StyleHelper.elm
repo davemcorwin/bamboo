@@ -35,3 +35,8 @@ gridColumn b =
 grid : String
 grid =
     "grid"
+
+
+pointerEvents : String -> Style
+pointerEvents b =
+    ( "pointer-events", b )

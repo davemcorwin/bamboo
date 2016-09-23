@@ -1,6 +1,6 @@
 module Sheet exposing (..)
 
-import Html exposing (..)
+import Html exposing (Html, div, text)
 import Html.Attributes exposing (id, class, style)
 import Style exposing (..)
 import StyleHelper exposing (..)
@@ -10,12 +10,21 @@ import String
 -- Model
 
 
+type alias Selection =
+    { startRow : Int
+    , endRow : Int
+    , startColumn : Int
+    , endColumn : Int
+    }
+
+
 type alias Model =
     { numCols : Int
     , numRows : Int
     , dfltColWidth : Int
     , dfltRowHeight : Int
     , colHeaderColWidth : Int
+    , selection : Selection
     }
 
 
@@ -26,6 +35,12 @@ init =
     , dfltColWidth = 100
     , dfltRowHeight = 35
     , colHeaderColWidth = 50
+    , selection =
+        { startRow = 2
+        , endRow = 4
+        , startColumn = 3
+        , endColumn = 6
+        }
     }
 
 
@@ -64,7 +79,7 @@ gridLayoutStyle rows cols =
     ]
 
 
-gridLayout : (Model -> String) -> (Model -> String) -> (Model -> List (Html.Html msg)) -> Model -> Html.Html msg
+gridLayout : (Model -> String) -> (Model -> String) -> (Model -> List (Html msg)) -> Model -> Html msg
 gridLayout rows cols children model =
     div
         [ style (gridLayoutStyle (rows model) (cols model)) ]
@@ -89,14 +104,14 @@ dataCellStyle row col =
         ]
 
 
-dataCell : String -> String -> String -> Html.Html msg
+dataCell : String -> String -> String -> Html msg
 dataCell row col value =
     div
         [ class "data-cell", style (dataCellStyle row col) ]
         [ text value ]
 
 
-headerCell : String -> String -> String -> Html.Html msg
+headerCell : String -> String -> String -> Html msg
 headerCell row col value =
     div
         [ class "header-cell", style (gridCellStyle row col) ]
@@ -114,7 +129,7 @@ cornerCellStyle model =
     ]
 
 
-cornerCell : Model -> Html.Html msg
+cornerCell : Model -> Html msg
 cornerCell model =
     div [ class "corner-cell", style (cornerCellStyle model) ] []
 
@@ -123,23 +138,22 @@ cornerCell model =
 -- Row Header
 
 
-rowHeaderCells : Model -> List (Html.Html msg)
+rowHeaderCells : Model -> List (Html msg)
 rowHeaderCells model =
     [1..model.numCols]
         |> List.map (\v -> headerCell "1" (toString v) (alpha (v - 1)))
 
 
-rowHeaderStyle : Model -> Html.Attribute msg
+rowHeaderStyle : Model -> Styles
 rowHeaderStyle model =
-    style
-        [ ( "width", px ((model.dfltColWidth + 1) * model.numCols + model.colHeaderColWidth + 1) )
-        , ( "height", px (model.dfltRowHeight + 1) )
-        ]
+    [ width (px ((model.dfltColWidth + 1) * model.numCols + model.colHeaderColWidth + 1))
+    , height (px (model.dfltRowHeight + 1))
+    ]
 
 
-rowHeader : Model -> Html.Html msg
+rowHeader : Model -> Html msg
 rowHeader model =
-    div [ class "sticky row-header", rowHeaderStyle model ]
+    div [ class "sticky row-header", style (rowHeaderStyle model) ]
         [ gridLayout (\m -> px m.dfltRowHeight) colsFun rowHeaderCells model ]
 
 
@@ -147,7 +161,7 @@ rowHeader model =
 -- Col Header
 
 
-colHeaderCells : Model -> List (Html.Html msg)
+colHeaderCells : Model -> List (Html msg)
 colHeaderCells model =
     [1..model.numRows]
         |> List.map (\v -> headerCell (toString v) "1" (toString v))
@@ -160,17 +174,63 @@ colHeaderStyle model =
     ]
 
 
-colHeader : Model -> Html.Html msg
+colHeader : Model -> Html msg
 colHeader model =
     div [ class "sticky col-header", style (colHeaderStyle model) ]
         [ gridLayout rowsFun (\m -> px (m.dfltColWidth // 2)) colHeaderCells model ]
 
 
 
+-- Selection
+
+
+selectionStyle : Model -> Styles
+selectionStyle model =
+    [ border "1px solid rgb(237,134,100)"
+    , backgroundColor "rgba(237,134,100, .1)"
+    , cursor "cell"
+    , gridRow ((toString model.selection.startRow) ++ " / " ++ (toString (model.selection.endRow + 2)))
+    , gridColumn ((toString model.selection.startColumn) ++ " / " ++ (toString (model.selection.endColumn + 2)))
+    , zIndex "5"
+    , pointerEvents none
+    ]
+
+
+selection : Model -> List (Html msg)
+selection model =
+    [ div [ style (selectionStyle model) ] [] ]
+
+
+
+-- Active
+
+
+activeStyle : Model -> Styles
+activeStyle model =
+    [ gridRow (toString model.selection.startRow)
+    , gridColumn (toString model.selection.startColumn)
+    , zIndex "7"
+    , cursor "text"
+    , backgroundColor "rgb(48,53,65)"
+    , borderTopWidth (px 1)
+    , borderLeftWidth (px 1)
+    , borderTopStyle solid
+    , borderLeftStyle solid
+    , borderTopColor "rgb(237,134,100)"
+    , borderLeftColor "rgb(237,134,100)"
+    ]
+
+
+active : Model -> List (Html msg)
+active model =
+    [ div [ class "active-cell", style (activeStyle model) ] [] ]
+
+
+
 -- Data
 
 
-dataCells : Model -> List (Html.Html msg)
+dataCells : Model -> List (Html msg)
 dataCells model =
     List.concatMap (\r -> List.map (\c -> dataCell (toString r) (toString c) "") [1..model.numCols]) [1..model.numRows]
 
@@ -183,10 +243,10 @@ dataStyle model =
     ]
 
 
-data : Model -> Html.Html msg
+data : Model -> Html msg
 data model =
     div [ style (dataStyle model) ]
-        [ gridLayout rowsFun colsFun dataCells model ]
+        [ gridLayout rowsFun colsFun (\m -> List.concat [ dataCells m, selection m, active m ]) model ]
 
 
 
@@ -201,7 +261,7 @@ sheetStyle model =
     ]
 
 
-sheet : Html.Html msg
+sheet : Html msg
 sheet =
     div [ id "sheet", style (sheetStyle init) ]
         [ data init
