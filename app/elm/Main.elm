@@ -1,6 +1,7 @@
 module Main exposing (main)
 
-import Header exposing (header)
+import Sheet exposing (sheet)
+
 
 main =
-  header
+    sheet
