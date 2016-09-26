@@ -3,10 +3,11 @@ module Main exposing (main)
 import Html exposing (Html, div, text)
 import Html.App as App
 import Html.Attributes exposing (id, class, style)
-import Html.Events exposing (onClick)
+import Html.Events exposing (..)
 import Style exposing (..)
 import StyleHelper exposing (..)
 import String
+import Keyboard exposing (..)
 
 
 -- Model
@@ -30,20 +31,22 @@ type alias Model =
     }
 
 
-init : Model
+init : ( Model, Cmd Msg )
 init =
-    { numCols = 20
-    , numRows = 20
-    , dfltColWidth = 100
-    , dfltRowHeight = 35
-    , colHeaderColWidth = 50
-    , selection =
-        { startRow = 1
-        , endRow = 1
-        , startColumn = 1
-        , endColumn = 1
-        }
-    }
+    ( { numCols = 20
+      , numRows = 20
+      , dfltColWidth = 100
+      , dfltRowHeight = 35
+      , colHeaderColWidth = 50
+      , selection =
+            { startRow = 1
+            , endRow = 1
+            , startColumn = 1
+            , endColumn = 1
+            }
+      }
+    , Cmd.none
+    )
 
 
 
@@ -282,10 +285,11 @@ view model =
 
 type Msg
     = NoOp
+    | KeyPress KeyCode
     | SelectCell Int Int
 
 
-update : Msg -> Model -> Model
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         SelectCell row col ->
@@ -296,10 +300,29 @@ update msg model =
                 selection =
                     { foo | startRow = row, endRow = row, startColumn = col, endColumn = col }
             in
-                { model | selection = selection }
+                ( { model | selection = selection }, Cmd.none )
+
+        KeyPress keyCode ->
+            let
+                foo =
+                    model.selection
+
+                selection =
+                    { foo | startRow = foo.startRow + 1, endRow = foo.endRow + 1 }
+            in
+                ( { model | selection = selection }, Cmd.none )
 
         NoOp ->
-            model
+            ( model, Cmd.none )
+
+
+
+-- Subscriptions
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    downs (\k -> KeyPress k)
 
 
 
@@ -308,8 +331,9 @@ update msg model =
 
 main : Program Never
 main =
-    App.beginnerProgram
-        { model = init
-        , view = sheet
+    App.program
+        { init = init
+        , view = view
         , update = update
+        , subscriptions = subscriptions
         }
