@@ -22,14 +22,14 @@ gridTemplateRows b =
     ( "grid-template-rows", b )
 
 
-gridRow : String -> Style
-gridRow b =
-    ( "grid-row", b )
+gridRow : Int -> Int -> Style
+gridRow start end =
+    ( "grid-row", (toString start) ++ " / " ++ (toString end) )
 
 
-gridColumn : String -> Style
-gridColumn b =
-    ( "grid-column", b )
+gridColumn : Int -> Int -> Style
+gridColumn start end =
+    ( "grid-column", (toString start) ++ " / " ++ (toString end) )
 
 
 grid : String

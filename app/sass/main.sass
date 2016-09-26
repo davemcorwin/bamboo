@@ -2,48 +2,86 @@ $data-cells-background-color: rgb(48,53,65)
 $header-background-color: rgb(40,44,52)
 $line-border-color: rgb(62,68,81)
 $header-border-color: rgb(10,10,10)
+$selection-border-color: rgb(237,134,100)
+$selection-border: 1px solid rgb(237,134,100)
+$header-border: 1px solid rgb(10,10,10)
+$selection-background-color: rgba(237,134,100, .1)
 $font-color: rgb(165, 170, 178)
-$default-data-cell-width: 100px
+$cell-padding: 8px
+$layer-1: 0
+$layer-2: 5
+$layer-3: 10
+$layer-4: 15
+$layer-5: 20
 
 *
   box-sizing: border-box
 
 body
-  margin: 0px
   background-color: $data-cells-background-color
   color: $font-color
+  margin: 0px
 
 #sheet
   background-color: $header-border-color
+  position: relative
+
+.grid
+  display: grid
+  grid-gap: 1px
+
+.data
+  position: absolute
+
+.selection-range
+  border: $selection-border
+  cursor: cell
+  pointer-events: none
+  z-index: $layer-2
+
+.selection-cell
+  background-color: $selection-background-color
+  cursor: cell
+  pointer-events: none
+  z-index: $layer-2
+
+.selection-cell.active
+  background-color: $data-cells-background-color
+
+.header
+  position: sticky
+
+.row-header
+  @extend .header
+  top: 0px
+
+.col-header
+  @extend .header
+  left: 0px
 
 .corner-cell
   background-color: $header-background-color
   position: fixed
-  z-index: 20
-  border-right: 1px solid $header-border-color
-  border-bottom: 1px solid $header-border-color
-
-.sticky
-  position: sticky
-
-.row-header
-  top: 0px
-  margin-left: ($default-data-cell-width / 2) + 1
-
-.col-header
-  left: 0px
-
-.active-cell
-  background-color: $data-cells-background-color
-  border-top: 1px solid rgb(237,134,100)
-  border-left: 1px solid rgb(237,134,100)
+  z-index: $layer-5
+  border-right: $header-border
+  border-bottom: $header-border
 
 .data-cell
   background-color: $data-cells-background-color
+  cursor: cell
+  padding: $cell-padding
+  position: relative
 
 .header-cell
-  padding: 8px
   background-color: $header-background-color
-  text-align: center
   cursor: default
-  z-index: 15
+  padding: $cell-padding
+  text-align: center
+  z-index: $layer-4
+
+.active-cell
+  background-color: $data-cells-background-color
+  border-top: $selection-border
+  border-left: $selection-border
+  z-index: $layer-3
+  cursor: text
