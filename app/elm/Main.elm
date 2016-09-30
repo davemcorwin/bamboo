@@ -3,7 +3,7 @@ module Main exposing (main)
 import Html exposing (Html, div, text)
 import Html.App as App
 import Html.Attributes exposing (id, class, style)
-import Html.Events exposing (..)
+import Html.Events exposing (onClick, onMouseDown, onMouseEnter, onMouseUp)
 import Style exposing (..)
 import StyleHelper exposing (..)
 import String
@@ -21,12 +21,20 @@ type alias Selection =
     }
 
 
+type alias ActiveCell =
+    { row : Int
+    , column : Int
+    }
+
+
 type alias Model =
     { numCols : Int
     , numRows : Int
     , dfltColWidth : Int
     , dfltRowHeight : Int
     , colHeaderColWidth : Int
+    , dragging : Bool
+    , activeCell : ActiveCell
     , selection : Selection
     }
 
@@ -38,6 +46,11 @@ init =
       , dfltColWidth = 100
       , dfltRowHeight = 35
       , colHeaderColWidth = 50
+      , dragging = False
+      , activeCell =
+            { row = 1
+            , column = 1
+            }
       , selection =
             { startRow = 1
             , endRow = 1
@@ -99,7 +112,10 @@ dataCell row col value =
             [ gridRow row row
             , gridColumn col col
             ]
-        , onClick (SelectCell row col)
+          -- , onClick (SelectCell row col)
+        , onMouseDown (DragStart row col)
+        , onMouseUp (DragEnd row col)
+        , onMouseEnter (DragMove row col)
         ]
         [ text value ]
 
@@ -224,7 +240,7 @@ data model =
                 |> List.indexedMap
                     (\rowIdx row ->
                         List.indexedMap
-                            (\colIdx col -> selectionCell row col (rowIdx + colIdx == 0))
+                            (\colIdx col -> selectionCell row col (row == model.activeCell.row && col == model.activeCell.column))
                             [model.selection.startColumn..model.selection.endColumn]
                     )
                 |> List.concat
@@ -285,7 +301,10 @@ view model =
 
 type Msg
     = NoOp
-    | KeyPress KeyCode
+    | DragEnd Int Int
+    | DragMove Int Int
+    | DragStart Int Int
+    | KeyDown KeyCode
     | SelectCell Int Int
 
 
@@ -302,7 +321,7 @@ update msg model =
             in
                 ( { model | selection = selection }, Cmd.none )
 
-        KeyPress keyCode ->
+        KeyDown keyCode ->
             let
                 foo =
                     model.selection
@@ -311,6 +330,39 @@ update msg model =
                     { foo | startRow = foo.startRow + 1, endRow = foo.endRow + 1 }
             in
                 ( { model | selection = selection }, Cmd.none )
+
+        DragStart row col ->
+            ( { model
+                | dragging = True
+                , activeCell = ActiveCell row col
+                , selection = Selection row row col col
+              }
+            , Cmd.none
+            )
+
+        DragMove row col ->
+            case model.dragging of
+                False ->
+                    ( model, Cmd.none )
+
+                True ->
+                    let
+                        ac =
+                            model.activeCell
+                    in
+                        ( { model
+                            | selection =
+                                Selection
+                                    (Maybe.withDefault 0 (List.minimum [ ac.row, row ]))
+                                    (Maybe.withDefault 0 (List.maximum [ ac.row, row ]))
+                                    (Maybe.withDefault 0 (List.minimum [ ac.column, col ]))
+                                    (Maybe.withDefault 0 (List.maximum [ ac.column, col ]))
+                          }
+                        , Cmd.none
+                        )
+
+        DragEnd row col ->
+            ( { model | dragging = False }, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
@@ -322,10 +374,15 @@ update msg model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    downs (\k -> KeyPress k)
+    Sub.batch []
 
 
 
+-- [ Keyboard.downs KeyDown
+-- , Mouse.downs MouseDown
+-- , Mouse.moves MouseMove
+-- , Mouse.ups MouseUp
+-- ]
 -- App
 
 
