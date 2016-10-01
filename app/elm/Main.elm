@@ -112,7 +112,6 @@ dataCell row col value =
             [ gridRow row row
             , gridColumn col col
             ]
-          -- , onClick (SelectCell row col)
         , onMouseDown (DragStart row col)
         , onMouseUp (DragEnd row col)
         , onMouseEnter (DragMove row col)
@@ -124,14 +123,15 @@ dataCell row col value =
 -- Header Cell
 
 
-headerCell : Int -> Int -> String -> Html Msg
-headerCell row col value =
+headerCell : Int -> Int -> String -> Msg -> Html Msg
+headerCell row col value msg =
     div
         [ class "header-cell"
         , style
             [ gridRow row row
             , gridColumn col col
             ]
+        , onClick msg
         ]
         [ text value ]
 
@@ -148,6 +148,7 @@ cornerCell model =
             [ width (px (model.colHeaderColWidth + 1))
             , height (px (model.dfltRowHeight + 1))
             ]
+        , onClick SelectAll
         ]
         []
 
@@ -185,7 +186,7 @@ rowHeader model =
     let
         cells =
             [1..model.numCols]
-                |> List.map (\v -> headerCell 1 v (alpha (v - 1)))
+                |> List.map (\col -> headerCell 1 col (alpha (col - 1)) (SelectColumn col))
     in
         div
             [ class "row-header"
@@ -207,7 +208,7 @@ colHeader model =
     let
         cells =
             [1..model.numRows]
-                |> List.map (\v -> headerCell v 1 (toString v))
+                |> List.map (\row -> headerCell row 1 (toString row) (SelectRow row))
     in
         div
             [ class "col-header"
@@ -305,67 +306,85 @@ type Msg
     | DragMove Int Int
     | DragStart Int Int
     | KeyDown KeyCode
-    | SelectCell Int Int
+    | SelectAll
+    | SelectColumn Int
+    | SelectRow Int
+
+
+updateHelper : Model -> ( Model, Cmd Msg )
+updateHelper model =
+    ( model, Cmd.none )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case msg of
-        SelectCell row col ->
-            let
-                foo =
-                    model.selection
-
-                selection =
-                    { foo | startRow = row, endRow = row, startColumn = col, endColumn = col }
-            in
-                ( { model | selection = selection }, Cmd.none )
-
-        KeyDown keyCode ->
-            let
-                foo =
-                    model.selection
-
-                selection =
-                    { foo | startRow = foo.startRow + 1, endRow = foo.endRow + 1 }
-            in
-                ( { model | selection = selection }, Cmd.none )
-
-        DragStart row col ->
-            ( { model
-                | dragging = True
-                , activeCell = ActiveCell row col
-                , selection = Selection row row col col
-              }
-            , Cmd.none
-            )
-
-        DragMove row col ->
-            case model.dragging of
-                False ->
-                    ( model, Cmd.none )
-
-                True ->
+    let
+        result =
+            case msg of
+                KeyDown keyCode ->
                     let
-                        ac =
-                            model.activeCell
+                        foo =
+                            model.selection
+
+                        selection =
+                            { foo | startRow = foo.startRow + 1, endRow = foo.endRow + 1 }
                     in
-                        ( { model
-                            | selection =
-                                Selection
-                                    (Maybe.withDefault 0 (List.minimum [ ac.row, row ]))
-                                    (Maybe.withDefault 0 (List.maximum [ ac.row, row ]))
-                                    (Maybe.withDefault 0 (List.minimum [ ac.column, col ]))
-                                    (Maybe.withDefault 0 (List.maximum [ ac.column, col ]))
-                          }
-                        , Cmd.none
-                        )
+                        { model | selection = selection }
 
-        DragEnd row col ->
-            ( { model | dragging = False }, Cmd.none )
+                DragStart row col ->
+                    { model
+                        | dragging = True
+                        , activeCell = ActiveCell row col
+                        , selection = Selection row row col col
+                    }
 
-        NoOp ->
-            ( model, Cmd.none )
+                DragMove row col ->
+                    case model.dragging of
+                        False ->
+                            model
+
+                        True ->
+                            let
+                                ac =
+                                    model.activeCell
+                            in
+                                { model
+                                    | selection =
+                                        Selection
+                                            (Maybe.withDefault 1 (List.minimum [ ac.row, row ]))
+                                            (Maybe.withDefault 1 (List.maximum [ ac.row, row ]))
+                                            (Maybe.withDefault 1 (List.minimum [ ac.column, col ]))
+                                            (Maybe.withDefault 1 (List.maximum [ ac.column, col ]))
+                                }
+
+                DragEnd row col ->
+                    { model | dragging = False }
+
+                SelectAll ->
+                    { model
+                        | activeCell = ActiveCell 1 1
+                        , selection =
+                            Selection 1 model.numRows 1 model.numCols
+                    }
+
+                SelectColumn col ->
+                    { model
+                        | activeCell = ActiveCell 1 col
+                        , selection =
+                            Selection 1 model.numRows col col
+                    }
+
+                SelectRow row ->
+                    { model
+                        | activeCell = ActiveCell row 1
+                        , selection =
+                            Selection row row 1 model.numCols
+                    }
+
+                NoOp ->
+                    model
+    in
+        updateHelper result
 
 
 
@@ -378,11 +397,7 @@ subscriptions model =
 
 
 
--- [ Keyboard.downs KeyDown
--- , Mouse.downs MouseDown
--- , Mouse.moves MouseMove
--- , Mouse.ups MouseUp
--- ]
+-- Keyboard.downs KeyDown
 -- App
 
 
