@@ -1,13 +1,13 @@
-module Main exposing (main)
+port module Main exposing (main)
 
-import Html exposing (Html, div, text)
+import Html exposing (Attribute, Html, div, text)
 import Html.App as App
 import Html.Attributes exposing (id, class, style)
-import Html.Events exposing (onClick, onMouseDown, onMouseEnter, onMouseUp)
+import Html.Events exposing (keyCode, onClick, onMouseDown, onMouseEnter, onMouseUp, onWithOptions, Options)
 import Style exposing (..)
 import StyleHelper exposing (..)
 import String
-import Keyboard exposing (..)
+import Keyboard exposing (KeyCode)
 
 
 -- Model
@@ -317,19 +317,58 @@ updateHelper model =
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
+update msg ({ activeCell, selection } as model) =
     let
         result =
             case msg of
                 KeyDown keyCode ->
-                    let
-                        foo =
-                            model.selection
+                    case keyCode of
+                        -- left
+                        37 ->
+                            let
+                                col =
+                                    max 1 (activeCell.column - 1)
+                            in
+                                { model
+                                    | activeCell = { activeCell | column = col }
+                                    , selection = Selection activeCell.row activeCell.row col col
+                                }
 
-                        selection =
-                            { foo | startRow = foo.startRow + 1, endRow = foo.endRow + 1 }
-                    in
-                        { model | selection = selection }
+                        -- up
+                        38 ->
+                            let
+                                row =
+                                    max 1 (activeCell.row - 1)
+                            in
+                                { model
+                                    | activeCell = { activeCell | row = row }
+                                    , selection = Selection row row activeCell.column activeCell.column
+                                }
+
+                        -- right
+                        39 ->
+                            let
+                                col =
+                                    min model.numCols (activeCell.column + 1)
+                            in
+                                { model
+                                    | activeCell = { activeCell | column = col }
+                                    , selection = Selection activeCell.row activeCell.row col col
+                                }
+
+                        -- down
+                        40 ->
+                            let
+                                row =
+                                    min model.numRows (activeCell.row + 1)
+                            in
+                                { model
+                                    | activeCell = { activeCell | row = row }
+                                    , selection = Selection row row activeCell.column activeCell.column
+                                }
+
+                        _ ->
+                            model
 
                 DragStart row col ->
                     { model
@@ -344,18 +383,14 @@ update msg model =
                             model
 
                         True ->
-                            let
-                                ac =
-                                    model.activeCell
-                            in
-                                { model
-                                    | selection =
-                                        Selection
-                                            (Maybe.withDefault 1 (List.minimum [ ac.row, row ]))
-                                            (Maybe.withDefault 1 (List.maximum [ ac.row, row ]))
-                                            (Maybe.withDefault 1 (List.minimum [ ac.column, col ]))
-                                            (Maybe.withDefault 1 (List.maximum [ ac.column, col ]))
-                                }
+                            { model
+                                | selection =
+                                    Selection
+                                        (min activeCell.row row)
+                                        (max activeCell.row row)
+                                        (min activeCell.column col)
+                                        (max activeCell.column col)
+                            }
 
                 DragEnd row col ->
                     { model | dragging = False }
@@ -391,13 +426,18 @@ update msg model =
 -- Subscriptions
 
 
+port arrows : (KeyCode -> msg) -> Sub msg
+
+
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch []
+    Sub.batch
+        [ arrows KeyDown
+        ]
 
 
 
--- Keyboard.downs KeyDown
+--
 -- App
 
 

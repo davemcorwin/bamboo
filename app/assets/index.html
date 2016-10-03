@@ -13,6 +13,12 @@
     <script src="js/app.js"></script>
 
     <!-- Start Elm app in fullscreen mode -->
-    <script>Elm.Main.fullscreen();</script>
+    <script>
+      var app = Elm.Main.fullscreen();
+      window.onkeydown = function(e){
+        e.preventDefault();
+        app.ports.arrows.send(e.keyCode);
+      };
+    </script>
   </body>
 </html>
