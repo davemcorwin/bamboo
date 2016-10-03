@@ -37,16 +37,13 @@ body
   border: $selection-border
   cursor: cell
   pointer-events: none
-  z-index: $layer-2
+  z-index: $layer-3
 
 .selection-cell
   background-color: $selection-background-color
   cursor: cell
   pointer-events: none
   z-index: $layer-2
-
-.selection-cell.active
-  background-color: $data-cells-background-color
 
 .header
   position: sticky
@@ -81,7 +78,4 @@ body
 
 .active-cell
   background-color: $data-cells-background-color
-  border-top: $selection-border
-  border-left: $selection-border
   z-index: $layer-3
-  cursor: text

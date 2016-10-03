@@ -13,17 +13,17 @@ import Keyboard exposing (KeyCode)
 -- Model
 
 
-type alias Selection =
+type alias Cell =
+    { row : Int
+    , column : Int
+    }
+
+
+type alias Range =
     { startRow : Int
     , endRow : Int
     , startColumn : Int
     , endColumn : Int
-    }
-
-
-type alias ActiveCell =
-    { row : Int
-    , column : Int
     }
 
 
@@ -34,8 +34,10 @@ type alias Model =
     , dfltRowHeight : Int
     , colHeaderColWidth : Int
     , dragging : Bool
-    , activeCell : ActiveCell
-    , selection : Selection
+    , editing : Bool
+    , activeCell : Cell
+    , editCell : Cell
+    , selection : Range
     }
 
 
@@ -47,16 +49,10 @@ init =
       , dfltRowHeight = 35
       , colHeaderColWidth = 50
       , dragging = False
-      , activeCell =
-            { row = 1
-            , column = 1
-            }
-      , selection =
-            { startRow = 1
-            , endRow = 1
-            , startColumn = 1
-            , endColumn = 1
-            }
+      , editing = False
+      , editCell = Cell 1 1
+      , activeCell = Cell 1 1
+      , selection = Range 1 1 1 1
       }
     , Cmd.none
     )
@@ -154,21 +150,35 @@ cornerCell model =
 
 
 
+-- Active Cell
+
+
+activeCell : Int -> Int -> Bool -> Bool -> Html Msg
+activeCell row col dragging editing =
+    div
+        [ class "active-cell"
+        , style
+            [ gridRow row row
+            , gridColumn col col
+            , cursor
+                (if dragging then
+                    "cell"
+                 else
+                    "text"
+                )
+            ]
+        ]
+        []
+
+
+
 -- Selection Cell
 
 
-selectionCell : Int -> Int -> Bool -> Html Msg
-selectionCell row col idx =
+selectionCell : Int -> Int -> Html Msg
+selectionCell row col =
     div
-        [ class
-            ("selection-cell"
-                ++ case idx of
-                    True ->
-                        " active"
-
-                    _ ->
-                        ""
-            )
+        [ class "selection-cell"
         , style
             [ gridRow row row
             , gridColumn col col
@@ -225,7 +235,7 @@ colHeader model =
 
 
 data : Model -> Html Msg
-data model =
+data ({ selection } as model) =
     let
         cells =
             List.concatMap
@@ -236,15 +246,18 @@ data model =
                 )
                 [1..model.numRows]
 
+        notActiveCell row col =
+            if row == model.activeCell.row && col == model.activeCell.column then
+                activeCell row col model.dragging model.editing
+            else
+                selectionCell row col
+
         selectionCells =
-            [model.selection.startRow..model.selection.endRow]
-                |> List.indexedMap
-                    (\rowIdx row ->
-                        List.indexedMap
-                            (\colIdx col -> selectionCell row col (row == model.activeCell.row && col == model.activeCell.column))
-                            [model.selection.startColumn..model.selection.endColumn]
-                    )
-                |> List.concat
+            List.concatMap
+                (\row ->
+                    List.map (notActiveCell row) [selection.startColumn..selection.endColumn]
+                )
+                [selection.startRow..selection.endRow]
 
         selectionRange =
             [ div
@@ -331,7 +344,7 @@ update msg ({ activeCell, selection } as model) =
                             in
                                 { model
                                     | activeCell = { activeCell | column = col }
-                                    , selection = Selection activeCell.row activeCell.row col col
+                                    , selection = Range activeCell.row activeCell.row col col
                                 }
 
                         -- up
@@ -342,7 +355,7 @@ update msg ({ activeCell, selection } as model) =
                             in
                                 { model
                                     | activeCell = { activeCell | row = row }
-                                    , selection = Selection row row activeCell.column activeCell.column
+                                    , selection = Range row row activeCell.column activeCell.column
                                 }
 
                         -- right
@@ -353,7 +366,7 @@ update msg ({ activeCell, selection } as model) =
                             in
                                 { model
                                     | activeCell = { activeCell | column = col }
-                                    , selection = Selection activeCell.row activeCell.row col col
+                                    , selection = Range activeCell.row activeCell.row col col
                                 }
 
                         -- down
@@ -364,7 +377,7 @@ update msg ({ activeCell, selection } as model) =
                             in
                                 { model
                                     | activeCell = { activeCell | row = row }
-                                    , selection = Selection row row activeCell.column activeCell.column
+                                    , selection = Range row row activeCell.column activeCell.column
                                 }
 
                         _ ->
@@ -373,8 +386,8 @@ update msg ({ activeCell, selection } as model) =
                 DragStart row col ->
                     { model
                         | dragging = True
-                        , activeCell = ActiveCell row col
-                        , selection = Selection row row col col
+                        , activeCell = Cell row col
+                        , selection = Range row row col col
                     }
 
                 DragMove row col ->
@@ -385,7 +398,7 @@ update msg ({ activeCell, selection } as model) =
                         True ->
                             { model
                                 | selection =
-                                    Selection
+                                    Range
                                         (min activeCell.row row)
                                         (max activeCell.row row)
                                         (min activeCell.column col)
@@ -397,23 +410,23 @@ update msg ({ activeCell, selection } as model) =
 
                 SelectAll ->
                     { model
-                        | activeCell = ActiveCell 1 1
+                        | activeCell = Cell 1 1
                         , selection =
-                            Selection 1 model.numRows 1 model.numCols
+                            Range 1 model.numRows 1 model.numCols
                     }
 
                 SelectColumn col ->
                     { model
-                        | activeCell = ActiveCell 1 col
+                        | activeCell = Cell 1 col
                         , selection =
-                            Selection 1 model.numRows col col
+                            Range 1 model.numRows col col
                     }
 
                 SelectRow row ->
                     { model
-                        | activeCell = ActiveCell row 1
+                        | activeCell = Cell row 1
                         , selection =
-                            Selection row row 1 model.numCols
+                            Range row row 1 model.numCols
                     }
 
                 NoOp ->
