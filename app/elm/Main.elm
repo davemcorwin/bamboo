@@ -1,16 +1,23 @@
 port module Main exposing (main)
 
-import Html exposing (Attribute, Html, div, text)
+import Html exposing (Attribute, Html, div, input, text)
 import Html.App as App
-import Html.Attributes exposing (id, class, style)
-import Html.Events exposing (keyCode, onClick, onMouseDown, onMouseEnter, onMouseUp, onWithOptions, Options)
+import Html.Attributes exposing (id, class, style, type', value)
+import Html.Events exposing (keyCode, onClick, onDoubleClick, onFocus, onInput, onMouseDown, onMouseEnter, onMouseUp, onWithOptions, Options)
 import Style exposing (..)
 import StyleHelper exposing (..)
 import String
 import Keyboard exposing (KeyCode)
+import Dom
+import Task exposing (Task)
+import Dict exposing (Dict)
 
 
 -- Model
+
+
+type alias Data =
+    Dict ( Int, Int ) String
 
 
 type alias Cell =
@@ -38,6 +45,7 @@ type alias Model =
     , activeCell : Cell
     , editCell : Cell
     , selection : Range
+    , data : Data
     }
 
 
@@ -53,6 +61,7 @@ init =
       , editCell = Cell 1 1
       , activeCell = Cell 1 1
       , selection = Range 1 1 1 1
+      , data = Dict.empty
       }
     , Cmd.none
     )
@@ -100,23 +109,25 @@ gridLayout rows cols children model =
 -- Data Cell
 
 
-dataCell : Int -> Int -> String -> Html Msg
-dataCell row col value =
-    div
-        [ class "data-cell"
+dataCell : Int -> Int -> Model -> Html Msg
+dataCell row col model =
+    input
+        [ type' "text"
+        , id ("input-" ++ (toString row) ++ "-" ++ (toString col))
+        , class "data-cell"
         , style
             [ gridRow row row
             , gridColumn col col
             ]
+        , onDoubleClick (EditCell row col)
         , onMouseDown (DragStart row col)
         , onMouseUp (DragEnd row col)
         , onMouseEnter (DragMove row col)
+        , onFocus (ActivateCell row col)
+        , onInput (\content -> CellInput row col content)
+        , value (Maybe.withDefault "" (Dict.get ( row, col ) model.data))
         ]
-        [ text value ]
-
-
-
--- Header Cell
+        []
 
 
 headerCell : Int -> Int -> String -> Msg -> Html Msg
@@ -153,19 +164,13 @@ cornerCell model =
 -- Active Cell
 
 
-activeCell : Int -> Int -> Bool -> Bool -> Html Msg
-activeCell row col dragging editing =
+activeCell : Int -> Int -> Html Msg
+activeCell row col =
     div
         [ class "active-cell"
         , style
             [ gridRow row row
             , gridColumn col col
-            , cursor
-                (if dragging then
-                    "cell"
-                 else
-                    "text"
-                )
             ]
         ]
         []
@@ -241,14 +246,14 @@ data ({ selection } as model) =
             List.concatMap
                 (\row ->
                     List.map
-                        (\col -> dataCell row col "")
+                        (\col -> dataCell row col model)
                         [1..model.numCols]
                 )
                 [1..model.numRows]
 
         notActiveCell row col =
             if row == model.activeCell.row && col == model.activeCell.column then
-                activeCell row col model.dragging model.editing
+                activeCell row col
             else
                 selectionCell row col
 
@@ -315,13 +320,38 @@ view model =
 
 type Msg
     = NoOp
+    | ActivateCell Int Int
+    | CellInput Int Int String
+    | EditCell Int Int
     | DragEnd Int Int
     | DragMove Int Int
     | DragStart Int Int
+    | FocusError Dom.Error
+    | FocusSuccess ()
     | KeyDown KeyCode
     | SelectAll
     | SelectColumn Int
     | SelectRow Int
+
+
+focusCmd : Cell -> Cmd Msg
+focusCmd cell =
+    Task.perform FocusError FocusSuccess (Dom.focus ("input-" ++ (toString cell.row) ++ "-" ++ (toString cell.column)))
+
+
+activateCell : Cell -> Model -> Model
+activateCell cell model =
+    { model | activeCell = cell }
+
+
+selectRange : Range -> Model -> Model
+selectRange range model =
+    { model | selection = range }
+
+
+updateContent : Int -> Int -> String -> Model -> Model
+updateContent row col content model =
+    { model | data = (Dict.insert ( row, col ) content model.data) }
 
 
 updateHelper : Model -> ( Model, Cmd Msg )
@@ -331,108 +361,169 @@ updateHelper model =
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg ({ activeCell, selection } as model) =
-    let
-        result =
-            case msg of
-                KeyDown keyCode ->
-                    case keyCode of
-                        -- left
-                        37 ->
-                            let
-                                col =
-                                    max 1 (activeCell.column - 1)
-                            in
-                                { model
-                                    | activeCell = { activeCell | column = col }
-                                    , selection = Range activeCell.row activeCell.row col col
-                                }
+    case msg of
+        ActivateCell row col ->
+            updateHelper
+                (model
+                    |> activateCell (Cell row col)
+                    |> selectRange (Range row row col col)
+                )
 
-                        -- up
-                        38 ->
-                            let
-                                row =
-                                    max 1 (activeCell.row - 1)
-                            in
-                                { model
-                                    | activeCell = { activeCell | row = row }
-                                    , selection = Range row row activeCell.column activeCell.column
-                                }
+        CellInput row col content ->
+            updateHelper
+                (model
+                    |> updateContent row col content
+                )
 
-                        -- right
-                        39 ->
-                            let
-                                col =
-                                    min model.numCols (activeCell.column + 1)
-                            in
-                                { model
-                                    | activeCell = { activeCell | column = col }
-                                    , selection = Range activeCell.row activeCell.row col col
-                                }
+        FocusError error ->
+            updateHelper model
 
-                        -- down
-                        40 ->
-                            let
-                                row =
-                                    min model.numRows (activeCell.row + 1)
-                            in
-                                { model
-                                    | activeCell = { activeCell | row = row }
-                                    , selection = Range row row activeCell.column activeCell.column
-                                }
+        FocusSuccess name ->
+            updateHelper model
 
-                        _ ->
-                            model
+        EditCell row col ->
+            updateHelper
+                { model
+                    | activeCell = Cell row col
+                    , dragging = False
+                    , editing = True
+                    , selection = Range row row col col
+                }
 
-                DragStart row col ->
-                    { model
-                        | dragging = True
-                        , activeCell = Cell row col
-                        , selection = Range row row col col
-                    }
+        KeyDown keyCode ->
+            case keyCode of
+                -- left
+                37 ->
+                    let
+                        col =
+                            max 1 (activeCell.column - 1)
 
-                DragMove row col ->
-                    case model.dragging of
-                        False ->
-                            model
+                        cell =
+                            Cell activeCell.row col
+                    in
+                        ( model
+                            |> activateCell cell
+                            |> selectRange (Range activeCell.row activeCell.row col col)
+                        , focusCmd cell
+                        )
 
-                        True ->
-                            { model
-                                | selection =
-                                    Range
-                                        (min activeCell.row row)
-                                        (max activeCell.row row)
-                                        (min activeCell.column col)
-                                        (max activeCell.column col)
-                            }
+                -- up
+                38 ->
+                    let
+                        row =
+                            max 1 (activeCell.row - 1)
 
-                DragEnd row col ->
-                    { model | dragging = False }
+                        cell =
+                            Cell row activeCell.column
+                    in
+                        ( model
+                            |> activateCell cell
+                            |> selectRange (Range row row activeCell.column activeCell.column)
+                        , focusCmd cell
+                        )
 
-                SelectAll ->
-                    { model
-                        | activeCell = Cell 1 1
-                        , selection =
-                            Range 1 model.numRows 1 model.numCols
-                    }
+                -- right
+                39 ->
+                    let
+                        col =
+                            min model.numCols (activeCell.column + 1)
 
-                SelectColumn col ->
-                    { model
-                        | activeCell = Cell 1 col
-                        , selection =
-                            Range 1 model.numRows col col
-                    }
+                        cell =
+                            Cell activeCell.row col
+                    in
+                        ( model
+                            |> activateCell cell
+                            |> selectRange (Range activeCell.row activeCell.row col col)
+                        , focusCmd cell
+                        )
 
-                SelectRow row ->
-                    { model
-                        | activeCell = Cell row 1
-                        , selection =
-                            Range row row 1 model.numCols
-                    }
+                9 ->
+                    let
+                        col =
+                            min model.numCols (activeCell.column + 1)
 
-                NoOp ->
-                    model
-    in
-        updateHelper result
+                        cell =
+                            Cell activeCell.row col
+                    in
+                        ( model
+                            |> activateCell cell
+                            |> selectRange (Range activeCell.row activeCell.row col col)
+                        , focusCmd cell
+                        )
+
+                -- down
+                40 ->
+                    let
+                        row =
+                            min model.numRows (activeCell.row + 1)
+
+                        cell =
+                            Cell row activeCell.column
+                    in
+                        ( model
+                            |> activateCell cell
+                            |> selectRange (Range row row activeCell.column activeCell.column)
+                        , focusCmd cell
+                        )
+
+                _ ->
+                    updateHelper model
+
+        DragStart row col ->
+            updateHelper
+                { model
+                    | dragging = True
+                    , activeCell = Cell row col
+                    , selection = Range row row col col
+                }
+
+        DragMove row col ->
+            updateHelper
+                (case model.dragging of
+                    False ->
+                        model
+
+                    True ->
+                        { model
+                            | selection =
+                                Range
+                                    (min activeCell.row row)
+                                    (max activeCell.row row)
+                                    (min activeCell.column col)
+                                    (max activeCell.column col)
+                        }
+                )
+
+        DragEnd row col ->
+            updateHelper
+                { model | dragging = False }
+
+        SelectAll ->
+            updateHelper
+                { model
+                    | activeCell = Cell 1 1
+                    , selection =
+                        Range 1 model.numRows 1 model.numCols
+                }
+
+        SelectColumn col ->
+            updateHelper
+                { model
+                    | activeCell = Cell 1 col
+                    , selection =
+                        Range 1 model.numRows col col
+                }
+
+        SelectRow row ->
+            updateHelper
+                { model
+                    | activeCell = Cell row 1
+                    , selection =
+                        Range row row 1 model.numCols
+                }
+
+        NoOp ->
+            updateHelper model
 
 
 

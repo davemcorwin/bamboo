@@ -16,8 +16,10 @@
     <script>
       var app = Elm.Main.fullscreen();
       window.onkeydown = function(e){
-        e.preventDefault();
-        app.ports.arrows.send(e.keyCode);
+        if ([37, 38, 39, 40].includes(e.keyCode)) {
+          e.preventDefault();
+          app.ports.arrows.send(e.keyCode);
+        }
       };
     </script>
   </body>
