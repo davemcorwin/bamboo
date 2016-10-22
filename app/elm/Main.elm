@@ -2,18 +2,34 @@ port module Main exposing (main)
 
 import Html exposing (Attribute, Html, div, input, text)
 import Html.App as App
+import Html.Lazy exposing (..)
 import Html.Attributes exposing (id, class, style, type', value)
 import Html.Events exposing (keyCode, onClick, onDoubleClick, onFocus, onInput, onMouseDown, onMouseEnter, onMouseUp, onWithOptions, Options)
 import Style exposing (..)
 import StyleHelper exposing (..)
 import String
-import Keyboard exposing (KeyCode)
 import Dom
 import Task exposing (Task)
 import Dict exposing (Dict)
 
 
 -- Model
+
+
+rowsFun : Int -> Int -> String
+rowsFun rowHeight numRows =
+    rowHeight
+        |> List.repeat numRows
+        |> List.map px
+        |> String.join " "
+
+
+colsFun : Int -> Int -> String
+colsFun colWidth numCols =
+    colWidth
+        |> List.repeat numCols
+        |> List.map px
+        |> String.join " "
 
 
 type alias Data =
@@ -34,16 +50,22 @@ type alias Range =
     }
 
 
-type alias Model =
+type alias Defaults =
     { numCols : Int
     , numRows : Int
     , dfltColWidth : Int
     , dfltRowHeight : Int
     , colHeaderColWidth : Int
+    , rows : String
+    , columns : String
+    }
+
+
+type alias Model =
+    { defaults : Defaults
     , dragging : Bool
     , editing : Bool
     , activeCell : Cell
-    , editCell : Cell
     , selection : Range
     , data : Data
     }
@@ -51,20 +73,38 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    ( { numCols = 20
-      , numRows = 20
-      , dfltColWidth = 100
-      , dfltRowHeight = 35
-      , colHeaderColWidth = 50
-      , dragging = False
-      , editing = False
-      , editCell = Cell 1 1
-      , activeCell = Cell 1 1
-      , selection = Range 1 1 1 1
-      , data = Dict.empty
-      }
-    , Cmd.none
-    )
+    let
+        numCols =
+            26
+
+        numRows =
+            100
+
+        dfltColWidth =
+            100
+
+        dfltRowHeight =
+            35
+
+        defaults =
+            { numCols = numCols
+            , numRows = numRows
+            , dfltColWidth = dfltColWidth
+            , dfltRowHeight = dfltRowHeight
+            , colHeaderColWidth = 50
+            , rows = rowsFun dfltRowHeight numRows
+            , columns = colsFun dfltColWidth numCols
+            }
+    in
+        ( { defaults = defaults
+          , dragging = False
+          , editing = False
+          , activeCell = Cell 1 1
+          , selection = Range 1 1 1 1
+          , data = Dict.empty
+          }
+        , Cmd.none
+        )
 
 
 
@@ -77,43 +117,27 @@ alpha idx =
         |> String.slice idx (idx + 1)
 
 
-rowsFun : Model -> String
-rowsFun model =
-    model.dfltRowHeight
-        |> List.repeat model.numRows
-        |> List.map px
-        |> String.join " "
-
-
-colsFun : Model -> String
-colsFun model =
-    model.dfltColWidth
-        |> List.repeat model.numCols
-        |> List.map px
-        |> String.join " "
-
-
-gridLayout : (Model -> String) -> (Model -> String) -> List (Html Msg) -> Model -> Html Msg
-gridLayout rows cols children model =
+gridLayout : String -> String -> List (Html Msg) -> Html Msg
+gridLayout rows cols children =
     div
         [ class "grid"
         , style
-            [ gridTemplateColumns (cols model)
-            , gridTemplateRows (rows model)
+            [ gridTemplateColumns cols
+            , gridTemplateRows rows
             ]
         ]
         children
 
 
 
--- Data Cell
+-- Cells
 
 
-dataCell : Int -> Int -> Model -> Html Msg
-dataCell row col model =
+dataCell : Int -> Int -> Maybe String -> Html Msg
+dataCell row col data =
     input
         [ type' "text"
-        , id ("input-" ++ (toString row) ++ "-" ++ (toString col))
+          -- , id ("input-" ++ (toString row) ++ "-" ++ (toString col))
         , class "data-cell"
         , style
             [ gridRow row row
@@ -125,7 +149,7 @@ dataCell row col model =
         , onMouseEnter (DragMove row col)
         , onFocus (ActivateCell row col)
         , onInput (\content -> CellInput row col content)
-        , value (Maybe.withDefault "" (Dict.get ( row, col ) model.data))
+        , value (Maybe.withDefault "" data)
         ]
         []
 
@@ -143,31 +167,28 @@ headerCell row col value msg =
         [ text value ]
 
 
-
--- Corner Cell
-
-
-cornerCell : Model -> Html Msg
-cornerCell model =
+cornerCell : Defaults -> Html Msg
+cornerCell { colHeaderColWidth, dfltRowHeight } =
     div
         [ class "corner-cell"
         , style
-            [ width (px (model.colHeaderColWidth + 1))
-            , height (px (model.dfltRowHeight + 1))
+            [ width (px (colHeaderColWidth + 1))
+            , height (px (dfltRowHeight + 1))
             ]
         , onClick SelectAll
         ]
         []
 
 
-
--- Active Cell
-
-
-activeCell : Int -> Int -> Html Msg
-activeCell row col =
+selectionCell : Int -> Int -> Bool -> Html Msg
+selectionCell row col isActive =
     div
-        [ class "active-cell"
+        [ class
+            (if isActive then
+                "active-cell"
+             else
+                "selection-cell"
+            )
         , style
             [ gridRow row row
             , gridColumn col col
@@ -177,112 +198,118 @@ activeCell row col =
 
 
 
--- Selection Cell
+-- Headers
 
 
-selectionCell : Int -> Int -> Html Msg
-selectionCell row col =
-    div
-        [ class "selection-cell"
-        , style
-            [ gridRow row row
-            , gridColumn col col
-            ]
-        ]
-        []
-
-
-
--- Row Header
-
-
-rowHeader : Model -> Html Msg
-rowHeader model =
+rowHeader : Defaults -> Html Msg
+rowHeader { colHeaderColWidth, columns, dfltColWidth, dfltRowHeight, numCols } =
     let
         cells =
-            [1..model.numCols]
+            [1..numCols]
                 |> List.map (\col -> headerCell 1 col (alpha (col - 1)) (SelectColumn col))
     in
         div
             [ class "row-header"
             , style
-                [ width (px ((model.dfltColWidth + 1) * model.numCols + model.colHeaderColWidth + 1))
-                , height (px (model.dfltRowHeight + 1))
-                , marginLeft (px (model.dfltColWidth // 2 + 1))
+                [ width (px ((dfltColWidth + 1) * numCols + colHeaderColWidth + 1))
+                , height (px (dfltRowHeight + 1))
+                , marginLeft (px (dfltColWidth // 2 + 1))
                 ]
             ]
-            [ gridLayout (\m -> px m.dfltRowHeight) colsFun cells model ]
+            [ gridLayout (px dfltRowHeight) columns cells ]
 
 
-
--- Col Header
-
-
-colHeader : Model -> Html Msg
-colHeader model =
+colHeader : Defaults -> Html Msg
+colHeader defaults =
     let
+        { colHeaderColWidth, dfltColWidth, dfltRowHeight, numRows, rows } =
+            defaults
+
         cells =
-            [1..model.numRows]
+            [1..numRows]
                 |> List.map (\row -> headerCell row 1 (toString row) (SelectRow row))
     in
         div
             [ class "col-header"
             , style
-                [ height (px ((model.dfltRowHeight) * (model.numRows + 1)))
-                , width (px (model.colHeaderColWidth + 1))
+                [ height (px ((dfltRowHeight) * (numRows + 1)))
+                , width (px (colHeaderColWidth + 1))
                 ]
             ]
-            [ gridLayout rowsFun (\m -> px (m.dfltColWidth // 2)) cells model ]
+            [ gridLayout rows (px (dfltColWidth // 2)) cells ]
 
 
 
--- Data
+-- Ranges
 
 
-data : Model -> Html Msg
-data ({ selection } as model) =
+dataCells : Defaults -> Data -> List (Html Msg)
+dataCells defaults data =
     let
-        cells =
-            List.concatMap
-                (\row ->
-                    List.map
-                        (\col -> dataCell row col model)
-                        [1..model.numCols]
-                )
-                [1..model.numRows]
+        { dfltColWidth, dfltRowHeight, numCols, numRows, rows, columns } =
+            defaults
+    in
+        List.concatMap
+            (\row ->
+                List.map
+                    (\col -> lazy3 dataCell row col (Dict.get ( row, col ) data))
+                    [1..numCols]
+            )
+            [1..numRows]
 
-        notActiveCell row col =
-            if row == model.activeCell.row && col == model.activeCell.column then
-                activeCell row col
-            else
-                selectionCell row col
 
-        selectionCells =
-            List.concatMap
-                (\row ->
-                    List.map (notActiveCell row) [selection.startColumn..selection.endColumn]
-                )
-                [selection.startRow..selection.endRow]
+selectionCells : Cell -> Range -> List (Html Msg)
+selectionCells activeCell selection =
+    let
+        { endColumn, endRow, startColumn, startRow } =
+            selection
+    in
+        List.concatMap
+            (\row ->
+                List.map
+                    (\col ->
+                        selectionCell row col (row == activeCell.row && col == activeCell.column)
+                    )
+                    [startColumn..endColumn]
+            )
+            [startRow..endRow]
 
-        selectionRange =
-            [ div
-                [ class "selection-range"
-                , style
-                    [ gridRow model.selection.startRow (model.selection.endRow + 1)
-                    , gridColumn model.selection.startColumn (model.selection.endColumn + 1)
-                    ]
+
+selectionRange : Range -> List (Html Msg)
+selectionRange selection =
+    let
+        { endColumn, endRow, startColumn, startRow } =
+            selection
+    in
+        [ div
+            [ class "selection-range"
+            , style
+                [ gridRow startRow (endRow + 1)
+                , gridColumn startColumn (endColumn + 1)
                 ]
-                []
             ]
+            []
+        ]
+
+
+
+-- Main
+
+
+foo : Defaults -> List (Html Msg) -> Html Msg
+foo defaults children =
+    let
+        { columns, dfltColWidth, dfltRowHeight, rows } =
+            defaults
     in
         div
             [ class "data"
             , style
-                [ left (px ((model.dfltColWidth // 2) + 1))
-                , top (px (model.dfltRowHeight + 1))
+                [ left (px ((dfltColWidth // 2) + 1))
+                , top (px (dfltRowHeight + 1))
                 ]
             ]
-            [ gridLayout rowsFun colsFun (List.concat [ cells, selectionCells, selectionRange ]) model ]
+            [ gridLayout rows columns children ]
 
 
 
@@ -291,18 +318,29 @@ data ({ selection } as model) =
 
 sheet : Model -> Html Msg
 sheet model =
-    div
-        [ id "sheet"
-        , style
-            [ width (px ((model.dfltColWidth + 1) * model.numCols + model.colHeaderColWidth + 1))
-            , height (px ((model.dfltRowHeight + 1) * (model.numRows + 1)))
+    let
+        { activeCell, data, defaults, selection } =
+            model
+    in
+        div
+            [ id "sheet"
+            , style
+                [ width (px ((defaults.dfltColWidth + 1) * defaults.numCols + defaults.colHeaderColWidth + 1))
+                , height (px ((defaults.dfltRowHeight + 1) * (defaults.numRows + 1)))
+                ]
             ]
-        ]
-        [ data model
-        , cornerCell model
-        , rowHeader model
-        , colHeader model
-        ]
+            [ lazy2 foo
+                defaults
+                (List.concat
+                    [ dataCells defaults data
+                    , selectionCells activeCell selection
+                    , selectionRange selection
+                    ]
+                )
+            , lazy cornerCell defaults
+            , lazy rowHeader defaults
+            , lazy colHeader defaults
+            ]
 
 
 
@@ -328,7 +366,7 @@ type Msg
     | DragStart Int Int
     | FocusError Dom.Error
     | FocusSuccess ()
-    | KeyDown KeyCode
+    | KeyDown ( String, Bool )
     | SelectAll
     | SelectColumn Int
     | SelectRow Int
@@ -390,10 +428,9 @@ update msg ({ activeCell, selection } as model) =
                     , selection = Range row row col col
                 }
 
-        KeyDown keyCode ->
-            case keyCode of
-                -- left
-                37 ->
+        KeyDown ( key, shiftKey ) ->
+            case key of
+                "ArrowLeft" ->
                     let
                         col =
                             max 1 (activeCell.column - 1)
@@ -407,8 +444,7 @@ update msg ({ activeCell, selection } as model) =
                         , focusCmd cell
                         )
 
-                -- up
-                38 ->
+                "ArrowUp" ->
                     let
                         row =
                             max 1 (activeCell.row - 1)
@@ -422,11 +458,10 @@ update msg ({ activeCell, selection } as model) =
                         , focusCmd cell
                         )
 
-                -- right
-                39 ->
+                "ArrowRight" ->
                     let
                         col =
-                            min model.numCols (activeCell.column + 1)
+                            min model.defaults.numCols (activeCell.column + 1)
 
                         cell =
                             Cell activeCell.row col
@@ -437,25 +472,40 @@ update msg ({ activeCell, selection } as model) =
                         , focusCmd cell
                         )
 
-                9 ->
-                    let
-                        col =
-                            min model.numCols (activeCell.column + 1)
+                "Tab" ->
+                    case shiftKey of
+                        True ->
+                            let
+                                col =
+                                    max 1 (activeCell.column - 1)
 
-                        cell =
-                            Cell activeCell.row col
-                    in
-                        ( model
-                            |> activateCell cell
-                            |> selectRange (Range activeCell.row activeCell.row col col)
-                        , focusCmd cell
-                        )
+                                cell =
+                                    Cell activeCell.row col
+                            in
+                                ( model
+                                    |> activateCell cell
+                                    |> selectRange (Range activeCell.row activeCell.row col col)
+                                , focusCmd cell
+                                )
 
-                -- down
-                40 ->
+                        False ->
+                            let
+                                col =
+                                    min model.defaults.numCols (activeCell.column + 1)
+
+                                cell =
+                                    Cell activeCell.row col
+                            in
+                                ( model
+                                    |> activateCell cell
+                                    |> selectRange (Range activeCell.row activeCell.row col col)
+                                , focusCmd cell
+                                )
+
+                "ArrowDown" ->
                     let
                         row =
-                            min model.numRows (activeCell.row + 1)
+                            min model.defaults.numRows (activeCell.row + 1)
 
                         cell =
                             Cell row activeCell.column
@@ -503,7 +553,7 @@ update msg ({ activeCell, selection } as model) =
                 { model
                     | activeCell = Cell 1 1
                     , selection =
-                        Range 1 model.numRows 1 model.numCols
+                        Range 1 model.defaults.numRows 1 model.defaults.numCols
                 }
 
         SelectColumn col ->
@@ -511,7 +561,7 @@ update msg ({ activeCell, selection } as model) =
                 { model
                     | activeCell = Cell 1 col
                     , selection =
-                        Range 1 model.numRows col col
+                        Range 1 model.defaults.numRows col col
                 }
 
         SelectRow row ->
@@ -519,7 +569,7 @@ update msg ({ activeCell, selection } as model) =
                 { model
                     | activeCell = Cell row 1
                     , selection =
-                        Range row row 1 model.numCols
+                        Range row row 1 model.defaults.numCols
                 }
 
         NoOp ->
@@ -530,13 +580,13 @@ update msg ({ activeCell, selection } as model) =
 -- Subscriptions
 
 
-port arrows : (KeyCode -> msg) -> Sub msg
+port keys : (( String, Bool ) -> msg) -> Sub msg
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ arrows KeyDown
+        [ keys KeyDown
         ]
 
 

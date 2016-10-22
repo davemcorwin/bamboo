@@ -15,10 +15,26 @@
     <!-- Start Elm app in fullscreen mode -->
     <script>
       var app = Elm.Main.fullscreen();
+      var isEditing = false;
+
+      // app.ports.editing.subscribe(function(editing) {
+      //   isEditing = editing;
+      // });
+
+      var keys = [
+        'ArrowDown',
+        'ArrowLeft',
+        'ArrowRight',
+        'ArrowUp',
+        'Tab',
+        'Enter',
+        'Escape'
+      ];
+
       window.onkeydown = function(e){
-        if ([37, 38, 39, 40].includes(e.keyCode)) {
-          e.preventDefault();
-          app.ports.arrows.send(e.keyCode);
+        if (keys.includes(e.key)) {
+          if ( (isEditing && !['ArrowLeft', 'ArrowRight'].includes(e.key)) || !isEditing)
+            app.ports.keys.send([e.key, e.shiftKey]);
         }
       };
     </script>
