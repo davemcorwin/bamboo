@@ -169,15 +169,19 @@ headerCell row col value msg =
 
 cornerCell : Defaults -> Html Msg
 cornerCell { colHeaderColWidth, dfltRowHeight } =
-    div
-        [ class "corner-cell"
-        , style
-            [ width (px (colHeaderColWidth + 1))
-            , height (px (dfltRowHeight + 1))
+    let
+        foo =
+            Debug.log "corner" 1
+    in
+        div
+            [ class "corner-cell"
+            , style
+                [ width (px (colHeaderColWidth + 1))
+                , height (px (dfltRowHeight + 1))
+                ]
+            , onClick SelectAll
             ]
-        , onClick SelectAll
-        ]
-        []
+            []
 
 
 selectionCell : Int -> Int -> Bool -> Html Msg
