@@ -169,19 +169,15 @@ headerCell row col value msg =
 
 cornerCell : Defaults -> Html Msg
 cornerCell { colHeaderColWidth, dfltRowHeight } =
-    let
-        foo =
-            Debug.log "corner" 1
-    in
-        div
-            [ class "corner-cell"
-            , style
-                [ width (px (colHeaderColWidth + 1))
-                , height (px (dfltRowHeight + 1))
-                ]
-            , onClick SelectAll
+    div
+        [ class "corner-cell"
+        , style
+            [ width (px (colHeaderColWidth + 1))
+            , height (px (dfltRowHeight + 1))
             ]
-            []
+        , onClick SelectAll
+        ]
+        []
 
 
 selectionCell : Int -> Int -> Bool -> Html Msg
@@ -279,13 +275,13 @@ selectionCells activeCell selection =
             [startRow..endRow]
 
 
-selectionRange : Range -> List (Html Msg)
+selectionRange : Range -> Html Msg
 selectionRange selection =
     let
         { endColumn, endRow, startColumn, startRow } =
             selection
     in
-        [ div
+        div
             [ class "selection-range"
             , style
                 [ gridRow startRow (endRow + 1)
@@ -293,7 +289,6 @@ selectionRange selection =
                 ]
             ]
             []
-        ]
 
 
 
@@ -335,12 +330,10 @@ sheet model =
             ]
             [ lazy2 foo
                 defaults
-                (List.concat
-                    [ dataCells defaults data
-                    , selectionCells activeCell selection
-                    , selectionRange selection
-                    ]
-                )
+                [ lazy2 dataCells defaults data
+                , lazy2 selectionCells activeCell selection
+                , lazy selectionRange selection
+                ]
             , lazy cornerCell defaults
             , lazy rowHeader defaults
             , lazy colHeader defaults
@@ -433,95 +426,33 @@ update msg ({ activeCell, selection } as model) =
                 }
 
         KeyDown ( key, shiftKey ) ->
-            case key of
-                "ArrowLeft" ->
-                    let
-                        col =
-                            max 1 (activeCell.column - 1)
+            let
+                cell =
+                    case key of
+                        "ArrowLeft" ->
+                            Cell activeCell.row (max 1 (activeCell.column - 1))
 
-                        cell =
-                            Cell activeCell.row col
-                    in
-                        ( model
-                            |> activateCell cell
-                            |> selectRange (Range activeCell.row activeCell.row col col)
-                        , focusCmd cell
-                        )
+                        "ArrowUp" ->
+                            Cell (max 1 (activeCell.row - 1)) activeCell.column
 
-                "ArrowUp" ->
-                    let
-                        row =
-                            max 1 (activeCell.row - 1)
+                        "ArrowRight" ->
+                            Cell activeCell.row (min model.defaults.numCols (activeCell.column + 1))
 
-                        cell =
-                            Cell row activeCell.column
-                    in
-                        ( model
-                            |> activateCell cell
-                            |> selectRange (Range row row activeCell.column activeCell.column)
-                        , focusCmd cell
-                        )
+                        "Tab" ->
+                            case shiftKey of
+                                True ->
+                                    Cell activeCell.row (max 1 (activeCell.column - 1))
 
-                "ArrowRight" ->
-                    let
-                        col =
-                            min model.defaults.numCols (activeCell.column + 1)
+                                False ->
+                                    Cell activeCell.row (min model.defaults.numCols (activeCell.column + 1))
 
-                        cell =
-                            Cell activeCell.row col
-                    in
-                        ( model
-                            |> activateCell cell
-                            |> selectRange (Range activeCell.row activeCell.row col col)
-                        , focusCmd cell
-                        )
+                        "ArrowDown" ->
+                            Cell (min model.defaults.numRows (activeCell.row + 1)) activeCell.column
 
-                "Tab" ->
-                    case shiftKey of
-                        True ->
-                            let
-                                col =
-                                    max 1 (activeCell.column - 1)
-
-                                cell =
-                                    Cell activeCell.row col
-                            in
-                                ( model
-                                    |> activateCell cell
-                                    |> selectRange (Range activeCell.row activeCell.row col col)
-                                , focusCmd cell
-                                )
-
-                        False ->
-                            let
-                                col =
-                                    min model.defaults.numCols (activeCell.column + 1)
-
-                                cell =
-                                    Cell activeCell.row col
-                            in
-                                ( model
-                                    |> activateCell cell
-                                    |> selectRange (Range activeCell.row activeCell.row col col)
-                                , focusCmd cell
-                                )
-
-                "ArrowDown" ->
-                    let
-                        row =
-                            min model.defaults.numRows (activeCell.row + 1)
-
-                        cell =
-                            Cell row activeCell.column
-                    in
-                        ( model
-                            |> activateCell cell
-                            |> selectRange (Range row row activeCell.column activeCell.column)
-                        , focusCmd cell
-                        )
-
-                _ ->
-                    updateHelper model
+                        _ ->
+                            activeCell
+            in
+                ( model, focusCmd cell )
 
         DragStart row col ->
             updateHelper
