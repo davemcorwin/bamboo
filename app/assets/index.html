@@ -34,6 +34,7 @@
       window.onkeydown = function(e){
         if (keys.includes(e.key)) {
           if ( (isEditing && !['ArrowLeft', 'ArrowRight'].includes(e.key)) || !isEditing)
+            e.preventDefault();
             app.ports.keys.send([e.key, e.shiftKey]);
         }
       };

@@ -3,7 +3,7 @@ port module Main exposing (main)
 import Html exposing (Attribute, Html, div, input, text)
 import Html.App as App
 import Html.Lazy exposing (..)
-import Html.Attributes exposing (id, class, style, type', value)
+import Html.Attributes exposing (id, class, contenteditable, style, type', value)
 import Html.Events exposing (keyCode, onClick, onDoubleClick, onFocus, onInput, onMouseDown, onMouseEnter, onMouseUp, onWithOptions, Options)
 import Style exposing (..)
 import StyleHelper exposing (..)
@@ -133,25 +133,46 @@ gridLayout rows cols children =
 -- Cells
 
 
-dataCell : Int -> Int -> Maybe String -> Html Msg
-dataCell row col data =
-    input
-        [ type' "text"
-          -- , id ("input-" ++ (toString row) ++ "-" ++ (toString col))
-        , class "data-cell"
+dataCell : Int -> Int -> Cell -> Maybe String -> Html Msg
+dataCell row col activeCell data =
+    div
+        [ class "data-cell"
         , style
             [ gridRow row row
             , gridColumn col col
             ]
+        , contenteditable (activeCell.row == row && activeCell.column == col)
         , onDoubleClick (EditCell row col)
         , onMouseDown (DragStart row col)
         , onMouseUp (DragEnd row col)
         , onMouseEnter (DragMove row col)
-        , onFocus (ActivateCell row col)
-        , onInput (\content -> CellInput row col content)
-        , value (Maybe.withDefault "" data)
+          -- , onFocus (ActivateCell row col)
+          -- , onInput (\content -> CellInput row col content)
+          -- , value (Maybe.withDefault "" data)
         ]
         []
+
+
+
+-- dataCell : Int -> Int -> Maybe String -> Html Msg
+-- dataCell row col data =
+--     input
+--         [ type' "text"
+--           -- , id ("input-" ++ (toString row) ++ "-" ++ (toString col))
+--         , class "data-cell"
+--         , style
+--             [ gridRow row row
+--             , gridColumn col col
+--             ]
+--         , onDoubleClick (EditCell row col)
+--         , onMouseDown (DragStart row col)
+--         , onMouseUp (DragEnd row col)
+--         , onMouseEnter (DragMove row col)
+--         , onFocus (ActivateCell row col)
+--         , onInput (\content -> CellInput row col content)
+--         , value (Maybe.withDefault "" data)
+--         ]
+--         []
 
 
 headerCell : Int -> Int -> String -> Msg -> Html Msg
@@ -168,16 +189,20 @@ headerCell row col value msg =
 
 
 cornerCell : Defaults -> Html Msg
-cornerCell { colHeaderColWidth, dfltRowHeight } =
-    div
-        [ class "corner-cell"
-        , style
-            [ width (px (colHeaderColWidth + 1))
-            , height (px (dfltRowHeight + 1))
+cornerCell defaults =
+    let
+        { colHeaderColWidth, dfltRowHeight } =
+            defaults
+    in
+        div
+            [ class "corner-cell"
+            , style
+                [ width (px (colHeaderColWidth + 1))
+                , height (px (dfltRowHeight + 1))
+                ]
+            , onClick SelectAll
             ]
-        , onClick SelectAll
-        ]
-        []
+            []
 
 
 selectionCell : Int -> Int -> Bool -> Html Msg
@@ -202,8 +227,11 @@ selectionCell row col isActive =
 
 
 rowHeader : Defaults -> Html Msg
-rowHeader { colHeaderColWidth, columns, dfltColWidth, dfltRowHeight, numCols } =
+rowHeader defaults =
     let
+        { colHeaderColWidth, columns, dfltColWidth, dfltRowHeight, numCols } =
+            defaults
+
         cells =
             [1..numCols]
                 |> List.map (\col -> headerCell 1 col (alpha (col - 1)) (SelectColumn col))
@@ -243,8 +271,8 @@ colHeader defaults =
 -- Ranges
 
 
-dataCells : Defaults -> Data -> List (Html Msg)
-dataCells defaults data =
+dataCells : Cell -> Defaults -> Data -> List (Html Msg)
+dataCells activeCell defaults data =
     let
         { dfltColWidth, dfltRowHeight, numCols, numRows, rows, columns } =
             defaults
@@ -252,7 +280,7 @@ dataCells defaults data =
         List.concatMap
             (\row ->
                 List.map
-                    (\col -> lazy3 dataCell row col (Dict.get ( row, col ) data))
+                    (\col -> dataCell row col activeCell (Dict.get ( row, col ) data))
                     [1..numCols]
             )
             [1..numRows]
@@ -268,7 +296,7 @@ selectionCells activeCell selection =
             (\row ->
                 List.map
                     (\col ->
-                        selectionCell row col (row == activeCell.row && col == activeCell.column)
+                        lazy3 selectionCell row col (row == activeCell.row && col == activeCell.column)
                     )
                     [startColumn..endColumn]
             )
@@ -295,9 +323,12 @@ selectionRange selection =
 -- Main
 
 
-foo : Defaults -> List (Html Msg) -> Html Msg
-foo defaults children =
+foo : Model -> Html Msg
+foo model =
     let
+        { activeCell, data, defaults, selection } =
+            model
+
         { columns, dfltColWidth, dfltRowHeight, rows } =
             defaults
     in
@@ -308,7 +339,15 @@ foo defaults children =
                 , top (px (dfltRowHeight + 1))
                 ]
             ]
-            [ gridLayout rows columns children ]
+            [ gridLayout rows
+                columns
+                (List.concat
+                    [ dataCells activeCell defaults data
+                    , selectionCells activeCell selection
+                    , [ selectionRange selection ]
+                    ]
+                )
+            ]
 
 
 
@@ -328,12 +367,7 @@ sheet model =
                 , height (px ((defaults.dfltRowHeight + 1) * (defaults.numRows + 1)))
                 ]
             ]
-            [ lazy2 foo
-                defaults
-                [ lazy2 dataCells defaults data
-                , lazy2 selectionCells activeCell selection
-                , lazy selectionRange selection
-                ]
+            [ lazy foo model
             , lazy cornerCell defaults
             , lazy rowHeader defaults
             , lazy colHeader defaults
@@ -452,7 +486,11 @@ update msg ({ activeCell, selection } as model) =
                         _ ->
                             activeCell
             in
-                ( model, focusCmd cell )
+                updateHelper
+                    { model
+                        | activeCell = cell
+                        , selection = Range cell.row cell.row cell.column cell.column
+                    }
 
         DragStart row col ->
             updateHelper
